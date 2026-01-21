@@ -146,3 +146,12 @@ class ResetPassword(APIView):
             return Response({"error": "User not found"}, status=404)
 
 
+class GetProfileView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = User.objects.filter(email=request.user.email).first()
+        serializer = UserProfileSerializer(user)
+        return Response(serializer.data)
+
+
