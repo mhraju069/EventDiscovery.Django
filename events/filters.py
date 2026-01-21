@@ -54,21 +54,32 @@ class EventFilter(filters.FilterSet):
         if not (user_lat and user_long and value):
             return queryset
 
-        user_lat = float(user_lat)
-        user_long = float(user_long)
-        distance_limit = float(value)
+        return self.apply_distance_filter(queryset, user_lat, user_long, value)
 
-        # Basic bounding box filtering for performance before accurate haversine
+    def apply_distance_filter(self, queryset, lat, long, distance):
+        lat = float(lat)
+        long = float(long)
+        distance = float(distance)
+
         # 1 degree of latitude is approx 69 miles
-        lat_range = distance_limit / 69.0
+        lat_range = distance / 69.0
         # 1 degree of longitude is approx 69 * cos(lat) miles
-        long_range = distance_limit / (69.0 * math.cos(math.radians(user_lat)))
+        long_range = distance / (69.0 * math.cos(math.radians(lat)))
 
-        queryset = queryset.filter(
-            latitude__range=(user_lat - lat_range, user_lat + lat_range),
-            longitude__range=(user_long - long_range, user_long + long_range)
+        return queryset.filter(
+            latitude__range=(lat - lat_range, lat + lat_range),
+            longitude__range=(long - long_range, long + long_range)
         )
 
-        # For more accurate results, we could iterate or use GeoDjango, 
-        # but bounding box is usually enough for simple cases.
-        return queryset
+    @property
+    def qs(self):
+        parent_qs = super().qs
+        user_lat = self.data.get('user_lat')
+        user_long = self.data.get('user_long')
+        distance = self.data.get('distance')
+
+        # If coordinates are provided but no distance is specified, default to 5 miles
+        if user_lat and user_long and not distance:
+            return self.apply_distance_filter(parent_qs, user_lat, user_long, 5.0)
+        
+        return parent_qs

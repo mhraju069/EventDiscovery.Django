@@ -11,13 +11,14 @@ class EventSerializer(serializers.ModelSerializer):
     images = EventImageSerializer(many=True, read_only=True)
     members = serializers.SerializerMethodField()
     admin = serializers.CharField(source='admin.email', read_only=True)
+    member_count = serializers.IntegerField(source='members.count', read_only=True)
     
     class Meta:
         model = Event
         fields = [
             'id', 'title', 'description', 'time', 'admin', 
             'location', 'latitude', 'longitude', 'age_group', 
-            'price', 'members', 'images'
+            'price', 'members', 'member_count', 'images'
         ]
         read_only_fields = ['id', 'admin', 'location']
     
