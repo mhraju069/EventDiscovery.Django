@@ -2,10 +2,12 @@
 import os
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
+load_dotenv()
 from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = 'django-insecure-!_^nq89m&l3v=mdq_7qnuqbqebr^-$*ft922=t*e_)+1lke!w^'
+SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 CORS_ALLOW_CREDENTIALS = True
@@ -15,6 +17,8 @@ CORS_ALLOW_ORIGINS = []
 CSRF_TRUSTED_ORIGINS = []
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -66,7 +70,16 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'core.wsgi.application'
+ASGI_APPLICATION = 'core.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [(os.getenv('REDIS_HOST', '127.0.0.1'), 6379)],
+        },
+    },
+}
 
 DATABASES = {
     'default': {

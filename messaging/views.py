@@ -2,7 +2,7 @@ from .models import *
 from .serializers import *
 from social.models import Group
 from rest_framework import status
-from django.shortcuts import render
+from .helper import get_chat_name
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.generics import ListAPIView
@@ -11,6 +11,54 @@ from core.permissions import IsEventAdmin,IsGroupAdmin
 from rest_framework.permissions import IsAuthenticated
 # Create your views here.
 
+class CreatePrivateChatView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        recipient_id = self.request.query_params.get('id')
+        if not recipient_id:
+            return Response({"success": False, "log": "Recipient id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if str(request.user.id) == str(recipient_id):
+            return Response({"success": False, "log": "You cannot chat with yourself"}, status=status.HTTP_400_BAD_REQUEST)
+
+        recipient = User.objects.filter(id=recipient_id).first()
+        if not recipient:
+            return Response({"success": False, "log": "Recipient not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if a private chat already exists between these two users
+        room = ChatRoom.objects.filter(type="private", members=request.user).filter(members=recipient).first()
+
+        if not room:
+            room = ChatRoom.objects.create(type="private", name=get_chat_name(request.user,recipient))
+            room.members.add(request.user, recipient)
+            room.save()
+
+        return Response({"success": True, "log": ChatRoomSerializer(room).data}, status=status.HTTP_200_OK)
+
+
+class DeleteChatView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        room_id = self.request.query_params.get('id')
+        if not room_id:
+            return Response({"success": False, "log": "Chat id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        room = ChatRoom.objects.filter(id=room_id).first()
+        if not room:
+            return Response({"success": False, "log": "Chat not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        if request.user not in room.members.all():
+            return Response({"success": False, "log": "You are not a member of this chat"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if room.type == "private":  
+            room.delete()
+
+        else:
+            if request.user != room.admin:
+                return Response({"success": False, "log": "You don't have permission to delete this chat"}, status=status.HTTP_400_BAD_REQUEST)
+            room.delete()
+            
+        return Response({"success": True, "log": "Chat deleted"}, status=status.HTTP_200_OK)
 
 class CreateGroupChatView(APIView):
     permission_classes = [IsAuthenticated,IsGroupAdmin]
