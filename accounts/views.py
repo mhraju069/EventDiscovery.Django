@@ -18,10 +18,10 @@ class SignUpView(APIView):
         name = request.data.get('name')
         
         if not email or not password or not name:
-            return Response({'success': False,'message': 'name, email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'success': False,'log': 'name, email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
         
         if User.objects.filter(email=email).exists():
-            return Response({'success': False,'message': 'User with this email already exists'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'success': False,'log': 'User with this email already exists'}, status=status.HTTP_400_BAD_REQUEST)
         
         user = User.objects.create_user(email=email, name=name)
         user.set_password(password)
@@ -33,7 +33,7 @@ class SignUpView(APIView):
             'access': str(token.access_token),
             'user': UserProfileSerializer(user).data
         }, status=status.HTTP_201_CREATED)
-        return Response({'success': False,'message': 'User creation failed'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': False,'log': 'User creation failed'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class SignInView(APIView):
@@ -46,9 +46,9 @@ class SignInView(APIView):
             if user and user.check_password(password):
 
                 if not user.is_active:
-                    return Response({'success': False,'message': 'User is not active'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'success': False,'log': 'User is not active'}, status=status.HTTP_400_BAD_REQUEST)
                 if user.block:
-                    return Response({'success': False,'message': 'User is blocked'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'success': False,'log': 'User is blocked'}, status=status.HTTP_400_BAD_REQUEST)
 
                 token = RefreshToken.for_user(user)
                 return Response({
@@ -57,7 +57,7 @@ class SignInView(APIView):
                     'user': UserProfileSerializer(user).data
                 }, status=status.HTTP_201_CREATED)
             
-        return Response({'success': False,'message': 'User authentication failed'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': False,'log': 'User authentication failed'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
@@ -75,16 +75,16 @@ class GetOtpView(APIView):
         task = request.data.get('task', '')
         if not email:
             return Response(
-                {"success": False,"message": "Email is required."},
+                {"success": False,"log": "Email is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         res = send_otp(email, task)
 
         if res['success']:
-            return Response({"success": True, "message": res['message']}, status=status.HTTP_200_OK)
+            return Response({"success": True, "log": res['log']}, status=status.HTTP_200_OK)
         else:
-            return Response({"success": False,"message": res['message']}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"success": False,"log": res['log']}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class OtpVerifyView(APIView):
@@ -94,7 +94,7 @@ class OtpVerifyView(APIView):
 
         if not email or not otp_code:
             return Response(
-                {"success": False,"message": "Email and OTP code are required."},
+                {"success": False,"log": "Email and OTP code are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -104,7 +104,7 @@ class OtpVerifyView(APIView):
             try:
                 user = User.objects.get(email=email)
             except User.DoesNotExist:
-                return Response({"success": False,"message": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"success": False,"log": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
             # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
@@ -115,8 +115,8 @@ class OtpVerifyView(APIView):
             }, status=status.HTTP_200_OK)
         else:
             # 403 for lock, 400 for invalid/expired
-            status_code = status.HTTP_403_FORBIDDEN if "Too many attempts" in result['message'] else status.HTTP_400_BAD_REQUEST
-            return Response({"success": False, "message": result['message']}, status=status_code)
+            status_code = status.HTTP_403_FORBIDDEN if "Too many attempts" in result['log'] else status.HTTP_400_BAD_REQUEST
+            return Response({"success": False, "log": result['log']}, status=status_code)
 
 
 class ResetPassword(APIView):
@@ -141,7 +141,7 @@ class ResetPassword(APIView):
             user = User.objects.get(email=email)
             user.set_password(new_password)
             user.save()
-            return Response({"success": True, "message": "Password reset successfully"}, status=200)
+            return Response({"success": True, "log": "Password reset successfully"}, status=200)
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)
 

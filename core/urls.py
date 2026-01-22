@@ -7,6 +7,7 @@ urlpatterns = [
     path('auth/', include('accounts.urls')),
     path('events/', include('events.urls')),
     path('social/', include('social.urls')),
+    path('chat/', include('messaging.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
