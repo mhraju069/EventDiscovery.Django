@@ -5,16 +5,11 @@ from rest_framework import status
 from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.generics import ListAPIView
+from core.pagination import CustomLimitPagination
 from core.permissions import IsEventAdmin,IsGroupAdmin
 from rest_framework.permissions import IsAuthenticated
-from core.pagination import CustomLimitPagination
 # Create your views here.
-
-class GetChatRoomsView(APIView):
-    permission_classes = [IsAuthenticated]
-    def get(self, request):
-        rooms = ChatRoom.objects.filter(members=request.user)
-        return Response({"success": True, "log": ChatRoomSerializer(rooms, many=True).data}, status=status.HTTP_200_OK)
 
 
 class CreateGroupChatView(APIView):
@@ -101,13 +96,14 @@ class GetRoomListView(APIView):
         return Response({"success": True,"type": type, "log": ChatRoomSerializer(rooms, many=True).data}, status=status.HTTP_200_OK)
 
 
-class GetRoomMessagesView(APIView):
+class GetRoomMessagesView(ListAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = MessageSerializer
     pagination_class = CustomLimitPagination
-    def get(self, request, room):
-        room = ChatRoom.objects.filter(id=room).first()
+    def get_queryset(self):
+        room = ChatRoom.objects.filter(id=self.kwargs['room']).first()
         if not room:
             return Response({"success": False, "log": "Room not found"}, status=status.HTTP_404_NOT_FOUND)
-        self.check_object_permissions(request, room)
+        self.check_object_permissions(self.request, room)
         messages = Message.objects.filter(room=room).order_by('-created_at')
-        return Response({"success": True, "log": MessageSerializer(messages, many=True).data}, status=status.HTTP_200_OK)
+        return messages
