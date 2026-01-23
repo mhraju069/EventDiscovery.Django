@@ -23,10 +23,11 @@ class ChatRoom(models.Model):
 class Message(models.Model):
     MESSAGE_TYPE_CHOICES = (("text", "Text"),("image", "Image"),("file", "File"),("voice", "Voice"),)
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    room = models.ForeignKey(ChatRoom,on_delete=models.CASCADE,related_name="messages",)    
-    sender = models.ForeignKey(User,on_delete=models.SET_NULL,null=True,related_name="sent_messages",)
+    room = models.ForeignKey(ChatRoom,on_delete=models.CASCADE,related_name="messages")    
+    sender = models.ForeignKey(User,on_delete=models.SET_NULL,null=True,related_name="sent_messages")
     type = models.CharField(max_length=10, choices=MESSAGE_TYPE_CHOICES, default="text")
     content = models.TextField(blank=True, null=True)
+    file = models.FileField(upload_to="chat_files/", blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
 

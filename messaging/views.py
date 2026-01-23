@@ -6,9 +6,11 @@ from .helper import get_chat_name
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.generics import ListAPIView
-from core.pagination import CustomLimitPagination
+from core.pagination import CustomLimitPagination,MyCursorPagination
 from core.permissions import IsEventAdmin,IsGroupAdmin
 from rest_framework.permissions import IsAuthenticated
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 # Create your views here.
 
 class CreatePrivateChatView(APIView):
@@ -59,6 +61,50 @@ class DeleteChatView(APIView):
             room.delete()
             
         return Response({"success": True, "log": "Chat deleted"}, status=status.HTTP_200_OK)
+
+
+class SendMessageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        room_id = request.data.get('room_id')
+        msg_type = request.data.get('type', 'text')
+        content = request.data.get('content', '')
+        file = request.FILES.get('file')
+
+        if not room_id:
+            return Response({"success": False, "log": "room_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        room = ChatRoom.objects.filter(id=room_id, members=request.user).first()
+        if not room:
+            return Response({"success": False, "log": "Room not found or you are not a member"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Save message to DB
+        message_obj = Message.objects.create(
+            room=room,
+            sender=request.user,
+            type=msg_type,
+            content=content,
+            file=file
+        )
+
+        message_data = MessageSerializer(message_obj).data
+        
+        # Broadcast to WebSocket
+        if user.id == message_data.user.id:
+            return
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+
+            f"chat_{room_id}",
+            {
+                'type': 'chat_message',
+                'message': message_data
+            }
+        )
+
+        return Response({"success": True, "log": message_data}, status=status.HTTP_201_CREATED)
+
 
 class CreateGroupChatView(APIView):
     permission_classes = [IsAuthenticated,IsGroupAdmin]
@@ -147,7 +193,7 @@ class GetRoomListView(APIView):
 class GetRoomMessagesView(ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = MessageSerializer
-    pagination_class = CustomLimitPagination
+    pagination_class = MyCursorPagination
     def get_queryset(self):
         room = ChatRoom.objects.filter(id=self.kwargs['room']).first()
         if not room:

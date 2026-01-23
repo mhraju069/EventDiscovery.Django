@@ -7,5 +7,6 @@ urlpatterns = [
     path('room-list/<str:type>/', GetRoomListView.as_view(), name='room-list'),
     path('join-group/<str:action>/', JoinGroupChatView.as_view(), name='join-group-chat'),
     path('messages/<str:room>/', GetRoomMessagesView.as_view(), name='room-messages'),
+    path('send-message/', SendMessageView.as_view(), name='send-message'),
     path('delete-chat/', DeleteChatView.as_view(), name='delete-chat'),
 ]   

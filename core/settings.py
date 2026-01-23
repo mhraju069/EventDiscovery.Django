@@ -124,7 +124,7 @@ REST_FRAMEWORK = {
         "django_filters.rest_framework.DjangoFilterBackend",
         'rest_framework.filters.OrderingFilter',
         ],
-    'DEFAULT_PAGINATION_CLASS': None,  # No default pagination
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.CursorPagination',
     'PAGE_SIZE': None,
     }
 
