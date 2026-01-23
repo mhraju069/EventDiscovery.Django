@@ -61,72 +61,73 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         if hasattr(self, 'room_group_name'):
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-        for group_name in self.groups:
-            await self.channel_layer.group_discard(group_name, self.channel_name)
+        
+        if hasattr(self, 'groups'):
+            for group_name in self.groups:
+                await self.channel_layer.group_discard(group_name, self.channel_name)
 
-        await self.send(text_data=json.dumps({
-            'type': 'Websocket Disconnected',
-            'message': f"Disconnected for {self.user.email}"
-        }))
-        print(f"✅ Websocket Disconnected for {self.user.email}")
+        print(f"✅ Websocket Disconnected for {getattr(self.user, 'email', 'Unknown User')}")
 
     async def receive(self, text_data):
-        """
-        Receive message from user and broadcast to room
-        """
+
         try:
+            print(f"📥 Received data: {text_data}")
             data = json.loads(text_data)
-            type = data.get('type', 'text')
+            
+            action_type = data.get('type', 'chat_message')
+            
+            msg_type = data.get('message_type', 'text')
+            if msg_type not in ['text', 'image', 'file', 'voice', 'video']:
+                msg_type = 'text'
+                
             content = data.get('content', '')
 
-            # Save message to DB
-            message_obj = await self.save_message(self.room, self.user, type, content)
+            if not self.room:
+                print("❌ No room associated with this connection")
+                return
 
-            # Use Serializer to get consistent data format
+            message_obj = await self.save_message(self.room, self.user, msg_type, content)
+            print(f"💾 Message saved to DB: {message_obj.id}")
+
             message_data = await sync_to_async(lambda: MessageSerializer(message_obj).data)()
             
-            # Since we don't have a 'request' in scope to get absolute URLs automatically, 
-            # we manually handle the file path if it exists
+            message_data = json.loads(json.dumps(message_data, default=str))
+
             if message_data.get('file'):
-                # In production, you'd use a setting for the domain
-                domain = self.scope.get('headers', {}).get(b'host', b'localhost:8000').decode()
+                headers = dict(self.scope.get('headers', []))
+                domain = headers.get(b'host', b'localhost:8000').decode()
                 scheme = 'https' if self.scope.get('https') else 'http'
                 message_data['file'] = f"{scheme}://{domain}{message_data['file']}"
 
-            # Send to room group
+            print(f"📡 Broadcasting to group: {self.room_group_name}")
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
-                    'type': 'chat_message',  # calls chat_message()
+                    'type': 'chat_message', 
                     'message': message_data
                 }
             )
         except Exception as e:
             print(f"❌ Error in receive: {e}")
+            import traceback
+            traceback.print_exc()
 
-    # ---------------------------
-    # Receive message from room group
-    # ---------------------------
-    
     async def chat_message(self, event):
         message = event.get('message')
         if not message:
             return
         
-        # Safe lookup for sender ID (could be 'sender' from serializer or 'sender' from receive)
         sender_id = message.get('sender')
         
         if str(self.user.id) == str(sender_id):
             return
             
+        print(f"📤 Sending message to user {self.user.email} in room {self.room_id}")
         await self.send(text_data=json.dumps({
             'type': 'chat_message',
             'message': message
-        }))
+        }, default=str))
 
-    # ---------------------------
-    # Helper functions
-    # ---------------------------
     @database_sync_to_async
     def save_message(self, room, sender, message_type, content):
         return Message.objects.create(
@@ -139,7 +140,8 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_room(self, room_id):
         try:
-            room = ChatRoom.objects.get(id=room_id,members=self.user)
+            room = ChatRoom.objects.get(id=room_id, members=self.user)
             return room
         except ChatRoom.DoesNotExist:
+            print(f"❌ Room lookup failed for room_id: {room_id} and user: {self.user.email}")
             return None

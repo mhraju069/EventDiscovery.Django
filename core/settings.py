@@ -13,8 +13,8 @@ ALLOWED_HOSTS = ['*']
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(default_headers) + ['ngrok-skip-browser-warning',]
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600
-CORS_ALLOW_ORIGINS = []
-CSRF_TRUSTED_ORIGINS = []
+CORS_ALLOW_ORIGINS = ['*']
+CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8001']
 
 INSTALLED_APPS = [
     'daphne',

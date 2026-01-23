@@ -21,7 +21,7 @@ class ChatRoom(models.Model):
 
 
 class Message(models.Model):
-    MESSAGE_TYPE_CHOICES = (("text", "Text"),("image", "Image"),("file", "File"),("voice", "Voice"),)
+    MESSAGE_TYPE_CHOICES = (("text", "Text"),("image", "Image"),("file", "File"),("voice", "Voice"),("video", "Video"),)
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     room = models.ForeignKey(ChatRoom,on_delete=models.CASCADE,related_name="messages")    
     sender = models.ForeignKey(User,on_delete=models.SET_NULL,null=True,related_name="sent_messages")

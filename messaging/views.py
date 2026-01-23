@@ -69,9 +69,20 @@ class SendFileMessageView(APIView):
 
     def post(self, request):
         room_id = request.data.get('room_id')
-        msg_type = request.data.get('type', 'file')
         content = request.data.get('content', '')
         file = request.FILES.get('file')
+        if file:
+            if file.name.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                msg_type = "image"
+            elif file.name.endswith(('.mp4', '.avi', '.mkv', '.mov', '.wmv')):
+                msg_type = "video"
+            elif file.name.endswith(('.mp3', '.wav', '.aac', '.flac', '.ogg')):
+                msg_type = "audio"
+            else:
+                msg_type = "file"
+        else:
+            msg_type = "text"
+
 
         if not room_id:
             return Response({"success": False, "log": "room_id is required"}, status=status.HTTP_400_BAD_REQUEST)
