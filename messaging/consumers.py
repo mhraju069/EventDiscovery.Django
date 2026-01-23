@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.utils import timezone
 from .models import *
+from .serializers import MessageSerializer
 from rest_framework_simplejwt.tokens import AccessToken
 User = get_user_model()
 
@@ -81,13 +82,16 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
             # Save message to DB
             message_obj = await self.save_message(self.room, self.user, type, content)
 
-            message_data = {
-                'room_id': str(self.room.id),
-                'sender_id': self.user.id,
-                'type': type,
-                'content': content,
-                'created_at': str(message_obj.created_at)
-            }
+            # Use Serializer to get consistent data format
+            message_data = await sync_to_async(lambda: MessageSerializer(message_obj).data)()
+            
+            # Since we don't have a 'request' in scope to get absolute URLs automatically, 
+            # we manually handle the file path if it exists
+            if message_data.get('file'):
+                # In production, you'd use a setting for the domain
+                domain = self.scope.get('headers', {}).get(b'host', b'localhost:8000').decode()
+                scheme = 'https' if self.scope.get('https') else 'http'
+                message_data['file'] = f"{scheme}://{domain}{message_data['file']}"
 
             # Send to room group
             await self.channel_layer.group_send(
@@ -105,11 +109,16 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
     # ---------------------------
     
     async def chat_message(self, event):
-        message = event['message']
+        message = event.get('message')
         if not message:
             return
-        if self.user.id == message['sender_id']:
+        
+        # Safe lookup for sender ID (could be 'sender' from serializer or 'sender' from receive)
+        sender_id = message.get('sender')
+        
+        if str(self.user.id) == str(sender_id):
             return
+            
         await self.send(text_data=json.dumps({
             'type': 'chat_message',
             'message': message

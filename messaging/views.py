@@ -1,5 +1,6 @@
 from .models import *
 from .serializers import *
+import json
 from social.models import Group
 from rest_framework import status
 from .helper import get_chat_name
@@ -63,12 +64,12 @@ class DeleteChatView(APIView):
         return Response({"success": True, "log": "Chat deleted"}, status=status.HTTP_200_OK)
 
 
-class SendMessageView(APIView):
+class SendFileMessageView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         room_id = request.data.get('room_id')
-        msg_type = request.data.get('type', 'text')
+        msg_type = request.data.get('type', 'file')
         content = request.data.get('content', '')
         file = request.FILES.get('file')
 
@@ -88,18 +89,19 @@ class SendMessageView(APIView):
             file=file
         )
 
-        message_data = MessageSerializer(message_obj).data
+        message_data = MessageSerializer(message_obj, context={'request': request}).data
         
+        # Convert message_data to a serializable format (handle UUIDs, datetime, etc.)
+        message_json = json.dumps(message_data, default=str)
+        message_dict = json.loads(message_json)
+
         # Broadcast to WebSocket
-        if user.id == message_data.user.id:
-            return
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-
             f"chat_{room_id}",
             {
                 'type': 'chat_message',
-                'message': message_data
+                'message': message_dict
             }
         )
 
