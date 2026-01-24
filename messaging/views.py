@@ -112,7 +112,8 @@ class SendFileMessageView(APIView):
             f"chat_{room_id}",
             {
                 'type': 'chat_message',
-                'message': message_dict
+                'message': message_dict,
+                'sender': request.user.id
             }
         )
 
