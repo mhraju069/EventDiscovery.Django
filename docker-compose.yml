@@ -3,7 +3,7 @@ version: '3'
 services:
   web:
     build: .
-    container_name: web
+    container_name: ed_web
     command: gunicorn core.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers 4
     volumes:
       - .:/app
@@ -17,7 +17,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: redis
+    container_name: ed_redis
     ports:
       - "6380:6379"
 
@@ -47,7 +47,7 @@ services:
 
   nginx:
     image: nginx:latest
-    container_name: nginx
+    container_name: ed_nginx
     ports:
       - "8001:80"
     volumes:

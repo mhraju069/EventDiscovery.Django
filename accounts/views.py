@@ -75,16 +75,16 @@ class GetOtpView(APIView):
         task = request.data.get('task', '')
         if not email:
             return Response(
-                {"success": False,"log": "Email is required."},
+                {"status": False,"log": "Email is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         res = send_otp(email, task)
 
         if res['success']:
-            return Response({"success": True, "log": res['log']}, status=status.HTTP_200_OK)
+            return Response({"status": True, "log": res['log']}, status=status.HTTP_200_OK)
         else:
-            return Response({"success": False,"log": res['log']}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": False,"log": res['log']}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class OtpVerifyView(APIView):
@@ -94,7 +94,7 @@ class OtpVerifyView(APIView):
 
         if not email or not otp_code:
             return Response(
-                {"success": False,"log": "Email and OTP code are required."},
+                {"status": False,"log": "Email and OTP code are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -104,7 +104,7 @@ class OtpVerifyView(APIView):
             try:
                 user = User.objects.get(email=email)
             except User.DoesNotExist:
-                return Response({"success": False,"log": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"status": False,"log": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
             # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
@@ -116,7 +116,7 @@ class OtpVerifyView(APIView):
         else:
             # 403 for lock, 400 for invalid/expired
             status_code = status.HTTP_403_FORBIDDEN if "Too many attempts" in result['log'] else status.HTTP_400_BAD_REQUEST
-            return Response({"success": False, "log": result['log']}, status=status_code)
+            return Response({"status": False, "log": result['log']}, status=status_code)
 
 
 class ResetPassword(APIView):
@@ -141,7 +141,7 @@ class ResetPassword(APIView):
             user = User.objects.get(email=email)
             user.set_password(new_password)
             user.save()
-            return Response({"success": True, "log": "Password reset successfully"}, status=200)
+            return Response({"status": True, "log": "Password reset successfully"}, status=200)
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)
 
