@@ -6,9 +6,9 @@ from rest_framework import status
 from .helper import get_chat_name
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView,RetrieveAPIView
 from core.pagination import paginate_response,MyCursorPagination,CustomLimitPagination
-from core.permissions import IsEventAdmin,IsGroupAdmin
+from core.permissions import IsEventAdmin,IsGroupAdmin,IsChatMember
 from rest_framework.permissions import IsAuthenticated
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -272,3 +272,14 @@ class GetRoomMessagesView(ListAPIView):
         self.check_object_permissions(self.request, room)
         messages = Message.objects.filter(room=room).order_by('-created_at')
         return messages
+
+
+class GetRoomDetailsView(RetrieveAPIView):
+    permission_classes = [IsAuthenticated,IsChatMember]
+    serializer_class = ChatRoomDetailsSerializer
+    def get_object(self):
+        room = ChatRoom.objects.filter(id=self.kwargs['room']).first()
+        if not room:
+            return Response({"status": False, "log": "Room not found"}, status=status.HTTP_404_NOT_FOUND)
+        self.check_object_permissions(self.request, room)
+        return room

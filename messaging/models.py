@@ -33,3 +33,9 @@ class Message(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
 
+
+class ChatInfo(models.Model):
+    user = models.ForeignKey(User,on_delete=models.CASCADE,related_name="chat_info")
+    active = models.BooleanField(default=False)
+    active_at = models.DateTimeField(null=True,blank=True)
+

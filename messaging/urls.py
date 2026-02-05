@@ -9,4 +9,5 @@ urlpatterns = [
     path('messages/<str:room>/', GetRoomMessagesView.as_view(), name='room-messages'),
     path('send-file-message/', SendFileMessageView.as_view(), name='send-file-message'),
     path('delete-chat/', DeleteChatView.as_view(), name='delete-chat'),
+    path('room/<str:room>/', GetRoomDetailsView.as_view(), name='room-details'),
 ]   

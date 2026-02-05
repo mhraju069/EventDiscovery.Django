@@ -26,6 +26,7 @@ def get_user_from_token(token):
 
 class GlobalChatConsumer(AsyncWebsocketConsumer):
 
+
     async def connect(self):
         try:
             token = self.scope['query_string'].decode().split('token=')[-1]
@@ -50,6 +51,8 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
 
             await self.accept()
             
+            await self.user_status(self.user, True)
+
             await self.send(text_data=json.dumps({
                 'type': 'Websocket Connected',
                 'message': f"Successfully connected for {self.user.email}"
@@ -60,6 +63,7 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
             print(f"❌ Connection Error: {e}")
             await self.close()
 
+
     async def disconnect(self, close_code):
         if hasattr(self, 'room_group_name'):
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
@@ -68,7 +72,10 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
             for group_name in self.groups:
                 await self.channel_layer.group_discard(group_name, self.channel_name)
 
+        await self.user_status(self.user, False)
+
         print(f"✅ Websocket Disconnected for {getattr(self.user, 'email', 'Unknown User')}")
+
 
     async def receive(self, text_data):
 
@@ -117,6 +124,7 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
             print(f"❌ Error in receive: {e}")
             import traceback
             traceback.print_exc()
+
 
     async def trigger_notifications(self, message_obj):
         """
@@ -199,6 +207,7 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
             content=content
         )
 
+
     @database_sync_to_async
     def get_room(self, room_id):
         try:
@@ -225,4 +234,16 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
             return room
         except Exception as e:
             print(f"❌ Room lookup failed for room_id: {room_id}. Error: {e}")
+            return None
+
+
+    @database_sync_to_async
+    def user_status(self, user, active=False):
+        try:
+            obj, created = ChatInfo.objects.get_or_create(user=user)
+            obj.active = active
+            obj.active_at = timezone.now()
+            obj.save()
+            return obj
+        except ChatInfo.DoesNotExist:
             return None
