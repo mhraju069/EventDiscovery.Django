@@ -71,20 +71,9 @@ class SendFileMessageView(APIView):
     def post(self, request):
         room_id = request.data.get('room_id')
         content = request.data.get('content', '')
-        file = request.FILES.get('file')
-        if file:
-            if file.name.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-                msg_type = "image"
-            elif file.name.endswith(('.mp4', '.avi', '.mkv', '.mov', '.wmv')):
-                msg_type = "video"
-            elif file.name.endswith(('.mp3', '.wav', '.aac', '.flac', '.ogg')):
-                msg_type = "audio"
-            else:
-                msg_type = "file"
-        else:
-            msg_type = "text"
-
-
+        reply_of_id = request.data.get('reply_of_id')
+        files = request.FILES.getlist('files')
+        
         if not room_id:
             return Response({"status": False, "log": "room_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -92,31 +81,62 @@ class SendFileMessageView(APIView):
         if not room:
             return Response({"status": False, "log": "Room not found or you are not a member"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Save message to DB
-        message_obj = Message.objects.create(
-            room=room,
-            sender=request.user,
-            type=msg_type,
-            content=content,
-            file=file
-        )
+        reply_of = None
+        if reply_of_id:
+            reply_of = Message.objects.filter(id=reply_of_id, room=room).first()
 
-        message_data = MessageSerializer(message_obj, context={'request': request}).data
+        messages_data = []
         
-        # Convert message_data to a serializable format (handle UUIDs, datetime, etc.)
-        message_json = json.dumps(message_data, default=str)
-        message_dict = json.loads(message_json)
+        def get_msg_type(f):
+            name = f.name.lower()
+            if name.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                return "image"
+            elif name.endswith(('.mp4', '.avi', '.mkv', '.mov', '.wmv')):
+                return "video"
+            elif name.endswith(('.mp3', '.wav', '.aac', '.flac', '.ogg')):
+                return "voice"
+            return "file"
+
+        if files:
+            for i, file in enumerate(files):
+                msg_type = get_msg_type(file)
+                # Attach content only to the first message if multiple files
+                msg_content = content if i == 0 else ""
+                
+                message_obj = Message.objects.create(
+                    room=room,
+                    sender=request.user,
+                    type=msg_type,
+                    content=msg_content,
+                    file=file,
+                    reply_of=reply_of
+                )
+                messages_data.append(MessageSerializer(message_obj, context={'request': request}).data)
+        elif content:
+            message_obj = Message.objects.create(
+                room=room,
+                sender=request.user,
+                type="text",
+                content=content,
+                reply_of=reply_of
+            )
+            messages_data.append(MessageSerializer(message_obj, context={'request': request}).data)
+        else:
+             return Response({"status": False, "log": "Content or file is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Broadcast to WebSocket
         channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"chat_{room_id}",
-            {
-                'type': 'chat_message',
-                'message': message_dict,
-                'sender': request.user.id
-            }
-        )
+        for msg_data in messages_data:
+            message_json = json.dumps(msg_data, default=str)
+            message_dict = json.loads(message_json)
+            async_to_sync(channel_layer.group_send)(
+                f"chat_{room_id}",
+                {
+                    'type': 'chat_message',
+                    'message': message_dict,
+                    'sender': request.user.id
+                }
+            )
 
         # Trigger Notifications
         from notifications.helper import send_notification
@@ -127,15 +147,22 @@ class SendFileMessageView(APIView):
         elif room.type == "event":
             notification_title = f"Event update: {room.name or 'Event'}"
 
+        # Get summary for notification
+        if len(messages_data) > 1:
+            notification_message = f"Sent {len(messages_data)} files"
+        else:
+            msg = messages_data[0]
+            notification_message = msg.get('content')[:100] if msg.get('content') else f"Sent a {msg.get('type')}"
+
         for recipient in recipients:
             send_notification(
                 user=recipient,
                 title=notification_title,
-                message=content[:100] if content else f"Sent a {msg_type}",
+                message=notification_message,
                 notification_type='message'
             )
 
-        return Response({"status": True, "log": message_data}, status=status.HTTP_201_CREATED)
+        return Response({"status": True, "log": messages_data}, status=status.HTTP_201_CREATED)
 
 
 class CreateGroupChatView(APIView):

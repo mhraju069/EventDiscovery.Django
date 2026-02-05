@@ -40,6 +40,16 @@ class ChatRoomSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    reply_of = serializers.SerializerMethodField()
     class Meta:
         model = Message
         fields = '__all__'
+
+    def get_reply_of(self, obj):
+        if obj.reply_of:
+            return {
+                "id" : obj.reply_of.id,
+                "content" : obj.reply_of.content,
+                "type" : obj.reply_of.type,
+                }
+        return None
