@@ -37,7 +37,7 @@ class CreatePrivateChatView(APIView):
             room.members.add(request.user, recipient)
             room.save()
 
-        return Response({"status": True, "log": ChatRoomSerializer(room).data}, status=status.HTTP_200_OK)
+        return Response({"status": True, "log": ChatRoomSerializer(room, context={'request': request}).data}, status=status.HTTP_200_OK)
 
 
 class DeleteChatView(APIView):
@@ -159,7 +159,7 @@ class CreateGroupChatView(APIView):
         
         room.members.add(*group.members.all())
         room.save()
-        return Response({"status": True, "log": ChatRoomSerializer(room).data}, status=status.HTTP_201_CREATED)
+        return Response({"status": True, "log": ChatRoomSerializer(room, context={'request': request}).data}, status=status.HTTP_201_CREATED)
 
 
 class JoinGroupChatView(APIView):
@@ -189,7 +189,7 @@ class JoinGroupChatView(APIView):
                 return Response({"status": False, "log": "You are not in the group chat"}, status=status.HTTP_400_BAD_REQUEST)
             room.members.remove(request.user)
         room.save()
-        return Response({"status": True, "log": ChatRoomSerializer(room).data}, status=status.HTTP_201_CREATED)
+        return Response({"status": True, "log": ChatRoomSerializer(room, context={'request': request}).data}, status=status.HTTP_201_CREATED)
 
 
 class CreateEventChatView(APIView):
@@ -198,8 +198,8 @@ class CreateEventChatView(APIView):
     def post(self, request):
         event_id = request.query_params.get('id')
         if not event_id:
-            return Response({"status": False, "log": "Event id is required"}, status=status.HTTP_400_BAD_REQUEST)
-        
+                return Response({"status": False, "log": "Event id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
         event = Event.objects.filter(id=event_id).first()
 
         if not event:
@@ -213,7 +213,7 @@ class CreateEventChatView(APIView):
         
         room.members.add(*event.members.all())
         room.save()
-        return Response({"status": True, "log": ChatRoomSerializer(room).data}, status=status.HTTP_201_CREATED)
+        return Response({"status": True, "log": ChatRoomSerializer(room, context={'request': request}).data}, status=status.HTTP_201_CREATED)
 
 
 class GetRoomListView(APIView):
@@ -224,11 +224,14 @@ class GetRoomListView(APIView):
         if type not in ["private","group","event","all"]:
             return Response({"status": False, "log": f"Invalid type {type}, possible values are private, group, event"}, status=status.HTTP_400_BAD_REQUEST)
         if type == "all":
-            rooms = ChatRoom.objects.filter(members=request.user).order_by('-messages__created_at')
+            rooms = ChatRoom.objects.filter(members=request.user)
         else:
-            rooms = ChatRoom.objects.filter(members=request.user,type=type).order_by('-messages__created_at')
-
-        return paginate_response(request, rooms, ChatRoomSerializer, CustomLimitPagination, {"request": request})
+            rooms = ChatRoom.objects.filter(members=request.user, type=type)
+            
+        from django.db.models import Max
+        rooms = rooms.annotate(last_message_at=Max('messages__created_at')).order_by('-last_message_at').distinct()
+        
+        return Response({"status": True, "log": ChatRoomSerializer(rooms, many=True, context={'request': request}).data}, status=status.HTTP_200_OK)
 
 
 class GetRoomMessagesView(ListAPIView):

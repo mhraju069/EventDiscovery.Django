@@ -7,13 +7,21 @@ class ChatRoomSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     
     def get_image(self, obj):
-        if obj.type == "private":
-            return obj.members.exclude(id=self.context['request'].user.id).first().image.url if obj.members.exclude(id=self.context['request'].user.id).first().image else None
+        request = self.context.get('request')
+        if obj.type == "private" and request:
+            other_user = obj.members.exclude(id=request.user.id).first()
+            if other_user and other_user.image:
+                return other_user.image.url
+            return None
         return obj.image.url if obj.image else None
 
     def get_name(self, obj):
-        if obj.type == "private":
-            return obj.members.exclude(id=self.context['request'].user.id).first().name or obj.members.exclude(id=self.context['request'].user.id).first().email
+        request = self.context.get('request')
+        if obj.type == "private" and request:
+            other_user = obj.members.exclude(id=request.user.id).first()
+            if other_user:
+                return other_user.name or other_user.email
+            return "Deleted User"
         return obj.name 
 
     def get_last_message(self, obj):
