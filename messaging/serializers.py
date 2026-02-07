@@ -4,14 +4,35 @@ from .models import *
 class ChatInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatInfo
-        fields = ["active","active_at"]
+        fields = ["active","last_active"]
 
 
 class ChatRoomSerializer(serializers.ModelSerializer):
     last_message = serializers.SerializerMethodField()
     name = serializers.SerializerMethodField()
     image = serializers.SerializerMethodField()
+    unread_messages = serializers.SerializerMethodField()
+    chat_info = serializers.SerializerMethodField()
 
+    def get_unread_messages(self, obj):
+        request = self.context.get('request')
+        if obj.type == "private" and request:
+            user = obj.members.filter(id=request.user.id).first()
+            chat_info = user.chat_info.filter(user=request.user).first()
+
+            msg_count = Message.objects.filter(room=obj, read_by=user).count()
+
+            return msg_count
+        return None
+
+    def get_chat_info(self, obj):
+        request = self.context.get('request')
+        if obj.type == "private" and request:
+            other_user = obj.members.exclude(id=request.user.id).first()
+            chat_info = other_user.chat_info.filter(user=other_user).first()
+            return ChatInfoSerializer(chat_info).data
+        return None
+   
     def get_image(self, obj):
         request = self.context.get('request')
         if obj.type == "private" and request:
@@ -29,7 +50,6 @@ class ChatRoomSerializer(serializers.ModelSerializer):
                 return other_user.name or other_user.email
             return "Deleted User"
         return obj.name 
-
 
     def get_last_message(self, obj):
         message = obj.messages.last()
@@ -77,16 +97,6 @@ class ChatRoomDetailsSerializer(serializers.ModelSerializer):
             return "Deleted User"
         return obj.name 
 
-    def get_last_message(self, obj):
-        message = obj.messages.last()
-        if message:
-            return {
-                "sender" : message.sender.name or message.sender.email,
-                "content" : message.content,
-                "created_at" : message.created_at,
-                }
-        return None
-    
     class Meta:
         model = ChatRoom
         fields = ["id","name","image","chat_info"]

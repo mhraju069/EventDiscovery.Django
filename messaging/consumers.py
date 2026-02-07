@@ -24,7 +24,56 @@ def get_user_from_token(token):
         return None
 
 
-class GlobalChatConsumer(AsyncWebsocketConsumer):
+class GlobalSocketConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        token = self.scope['query_string'].decode().split('token=')[-1]
+        self.user = await get_user_from_token(token)
+        
+        if not self.user:
+            await self.close()
+            return
+
+        self.room_group_name = 'global_socket'
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+        await self.accept()
+        await self.user_status(self.user, True)
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        await self.user_status(self.user, False)
+
+    async def receive(self, text_data):
+        data = json.loads(text_data)
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'global_message',
+                'message': data['message']
+            }
+        )
+
+    async def global_message(self, event):
+        await self.send(text_data=json.dumps(event))
+    
+
+    
+    @database_sync_to_async
+    def user_status(self, user, active=False):
+        try:
+            obj, created = ChatInfo.objects.get_or_create(user=user)
+            obj.active = active
+            if not active:
+                obj.last_active = timezone.now()
+            else:
+                obj.last_active = None
+            obj.save()
+            return obj
+        except Exception as e:
+            print(f"❌ User status update failed: {e}")
+            return None
+
+
+class ChatConsumer(AsyncWebsocketConsumer):
 
 
     async def connect(self):
@@ -51,8 +100,6 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
 
             await self.accept()
             
-            await self.user_status(self.user, True)
-
             await self.send(text_data=json.dumps({
                 'type': 'Websocket Connected',
                 'message': f"Successfully connected for {self.user.email}"
@@ -71,8 +118,6 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
         if hasattr(self, 'groups'):
             for group_name in self.groups:
                 await self.channel_layer.group_discard(group_name, self.channel_name)
-
-        await self.user_status(self.user, False)
 
         print(f"✅ Websocket Disconnected for {getattr(self.user, 'email', 'Unknown User')}")
 
@@ -117,69 +162,10 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
                 }
             )
 
-            # --- Notification Logic ---
-            await self.trigger_notifications(message_obj)
-
         except Exception as e:
             print(f"❌ Error in receive: {e}")
             import traceback
             traceback.print_exc()
-
-
-    async def trigger_notifications(self, message_obj):
-        """
-        Create and send notifications to all members of the room except the sender.
-        """
-        try:
-            from notifications.models import Notification
-            from notifications.serializers import NotificationSerializer
-
-            @database_sync_to_async
-            def get_recipients():
-                return list(self.room.members.exclude(id=self.user.id))
-
-            @database_sync_to_async
-            def create_notif(user, title, content):
-                return Notification.objects.create(
-                    user=user,
-                    title=title,
-                    message=content[:100],
-                    type='message'
-                )
-
-            recipients = await get_recipients()
-
-            for recipient in recipients:
-                title = f"New message from {self.user.name or self.user.email}"
-                if self.room.type != "private":
-                    title = f"New message in {self.room.name or 'Group'}"
-
-                notification_obj = await create_notif(recipient, title, message_obj.content)
-                
-                # Serialize
-                notification_data = await sync_to_async(lambda: NotificationSerializer(notification_obj).data)()
-                
-                # Send via Notification Socket
-                notification_group = f"user_notifications_{recipient.id}"
-                await self.channel_layer.group_send(
-                    notification_group,
-                    {
-                        'type': 'send_notification',
-                        'notification': notification_data
-                    }
-                )
-
-                # Send Push Notification (FCM)
-                try:
-                    from notifications.firebase_config import send_push_notification
-                    await sync_to_async(send_push_notification)(recipient, title, message_obj.content)
-                except Exception as e:
-                    print(f"❌ FCM Error: {e}")
-
-                print(f"🔔 Notification sent to {recipient.email}")
-
-        except Exception as e:
-            print(f"❌ Error triggering notifications: {e}")
 
 
     async def chat_message(self, event):
@@ -197,6 +183,7 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
             'type': 'chat_message',
             'message': message
         }, default=str))
+
 
     @database_sync_to_async
     def save_message(self, room, sender, message_type, content):
@@ -237,8 +224,6 @@ class GlobalChatConsumer(AsyncWebsocketConsumer):
             return None
 
 
-    @database_sync_to_async
-    def user_status(self, user, active=False):
         try:
             obj, created = ChatInfo.objects.get_or_create(user=user)
             obj.active = active

@@ -3,7 +3,7 @@ from .serializers import *
 import json
 from social.models import Group
 from rest_framework import status
-from .helper import get_chat_name
+from .helper import *
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.generics import ListAPIView,RetrieveAPIView
@@ -93,7 +93,7 @@ class SendFileMessageView(APIView):
                 return "image"
             elif name.endswith(('.mp4', '.avi', '.mkv', '.mov', '.wmv')):
                 return "video"
-            elif name.endswith(('.mp3', '.wav', '.aac', '.flac', '.ogg')):
+            elif name.endswith(('.mp3', '.wav', '.aac', '.flac', '.ogg','.m4a')):
                 return "voice"
             return "file"
 
@@ -111,6 +111,10 @@ class SendFileMessageView(APIView):
                     file=file,
                     reply_of=reply_of
                 )
+
+                if msg_type == "voice":
+                    message_obj = reduce_noise(message_obj,file.name)
+
                 messages_data.append(MessageSerializer(message_obj, context={'request': request}).data)
         elif content:
             message_obj = Message.objects.create(
