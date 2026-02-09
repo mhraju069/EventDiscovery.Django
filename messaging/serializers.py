@@ -104,6 +104,9 @@ class ChatRoomDetailsSerializer(serializers.ModelSerializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     reply_of = serializers.SerializerMethodField()
+    seen_by = serializers.SerializerMethodField()
+    sender = serializers.SerializerMethodField()
+
     class Meta:
         model = Message
         fields = '__all__'
@@ -116,3 +119,30 @@ class MessageSerializer(serializers.ModelSerializer):
                 "type" : obj.reply_of.type,
                 }
         return None
+
+    def get_seen_by(self, obj):
+        request = self.context.get('request')
+        qs = obj.seen_by.all()
+        if request and request.user:
+            qs = qs.exclude(id=request.user.id)
+
+        if obj.room.type == "private":
+            if qs.count() > 0:
+                return True
+            return False
+
+        return [
+            {
+                "name": user.name or user.email,
+                "image": user.image.url if user.image else None
+            }
+            for user in qs
+        ]
+
+    def get_sender(self, obj):
+        request = self.context.get('request')
+        if request and request.user:
+            return {
+                "name": request.user.name or request.user.email,
+                "image": request.user.image.url if request.user.image else None
+            }

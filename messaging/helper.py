@@ -1,6 +1,7 @@
 import os, uuid, subprocess
 from django.core.files import File
 from rest_framework.response import Response
+from .models import ChatRoom, Message
 
 
 def get_chat_name(user1,user2):
@@ -84,3 +85,16 @@ def reduce_noise(message, name):
                     os.remove(fpath)
                 except OSError:
                     pass
+
+
+def add_seen_by(room_id, user):
+    room = ChatRoom.objects.filter(id=room_id).first()
+    if not room:
+        return False
+    
+    messages = Message.objects.filter(room=room).exclude(sender=user).exclude(seen_by=user)
+    
+    for msg in messages:
+        msg.seen_by.add(user)
+    
+    return True

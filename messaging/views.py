@@ -266,14 +266,23 @@ class GetRoomListView(APIView):
 
 
 class GetRoomMessagesView(ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsChatMember]
     serializer_class = MessageSerializer
     pagination_class = MyCursorPagination
+    
     def get_queryset(self):
-        room = ChatRoom.objects.filter(id=self.kwargs['room']).first()
+        room_id = self.kwargs['room']
+        room = ChatRoom.objects.filter(id=room_id).first()
         if not room:
-            return Response({"status": False, "log": "Room not found"}, status=status.HTTP_404_NOT_FOUND)
+            # Note: queryset should normally return an empty queryset on error for ListAPIView, 
+            # but since we are doing manual room check, we handle it.
+            return Message.objects.none()
+            
         self.check_object_permissions(self.request, room)
+        
+        # Mark messages as seen
+        add_seen_by(room_id, self.request.user)
+        
         messages = Message.objects.filter(room=room).order_by('-created_at')
         return messages
 
@@ -287,3 +296,5 @@ class GetRoomDetailsView(RetrieveAPIView):
             return Response({"status": False, "log": "Room not found"}, status=status.HTTP_404_NOT_FOUND)
         self.check_object_permissions(self.request, room)
         return room
+
+

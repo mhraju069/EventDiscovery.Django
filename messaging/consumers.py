@@ -8,6 +8,7 @@ from django.conf import settings
 from django.utils import timezone
 from .models import *
 from .serializers import MessageSerializer
+from .helper import add_seen_by
 from rest_framework_simplejwt.tokens import AccessToken
 User = get_user_model()
 from django.db.models import Q
@@ -94,12 +95,31 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 
                 self.room_group_name = f"chat_{self.room_id}"
                 await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+                
+                # Mark messages as seen when connecting to the room
+                await database_sync_to_async(add_seen_by)(self.room_id, self.user)
+                
+                # Broadcast that this user has joined and seen all messages
+                img_url = await sync_to_async(lambda: self.user.image.url if self.user.image else None)()
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'seen_update',
+                        'user': {
+                            'id': self.user.id,
+                            'name': self.user.name or self.user.email,
+                            'image': img_url
+                        },
+                        'room_id': self.room_id,
+                        'seen_all': True
+                    }
+                )
             
             self.groups = [f"user_{self.user.id}"]
             await self.channel_layer.group_add(f"user_{self.user.id}", self.channel_name)
 
             await self.accept()
-            
+
             await self.send(text_data=json.dumps({
                 'type': 'Websocket Connected',
                 'message': f"Successfully connected for {self.user.email}"
@@ -109,6 +129,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             print(f"❌ Connection Error: {e}")
             await self.close()
+
+    async def seen_update(self, event):
+        await self.send(text_data=json.dumps(event, default=str))
 
 
     async def disconnect(self, close_code):
