@@ -117,7 +117,9 @@ class MessageSerializer(serializers.ModelSerializer):
                 "id" : obj.reply_of.id,
                 "content" : obj.reply_of.content,
                 "type" : obj.reply_of.type,
-                }
+                "sender" : obj.reply_of.sender.name or obj.reply_of.sender.email,
+                "file" : obj.reply_of.file.url if obj.reply_of.file else None,
+            }
         return None
 
     def get_seen_by(self, obj):
