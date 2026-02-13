@@ -1,4 +1,4 @@
-from .models import Event, EventImage
+from .models import Event, EventImage, WishList
 from rest_framework import serializers
 
 class EventImageSerializer(serializers.ModelSerializer):
@@ -24,3 +24,10 @@ class EventSerializer(serializers.ModelSerializer):
     
     def get_members(self, obj):
         return obj.members.values('id', 'image', 'email')
+
+
+class WishListSerializer(serializers.ModelSerializer):
+    events = EventSerializer(many=True, read_only=True)
+    class Meta:
+        model = WishList
+        fields = ['events']
