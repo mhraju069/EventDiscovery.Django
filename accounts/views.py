@@ -155,3 +155,30 @@ class GetProfileView(APIView):
         return Response(serializer.data)
 
 
+class OAuthLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, provider):
+
+        token = request.query_params.get('token')
+
+        if not token:
+            return Response({'success': False,'log': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if provider == 'google':
+            user, error = google_login(token)
+
+        elif provider == 'apple':
+            user, error = apple_login(token)
+        else:
+            return Response({'success': False,'log': 'Invalid provider, use google or apple'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if user:
+            token = RefreshToken.for_user(user)
+            return Response({
+                'access': str(token.access_token),
+                'refresh': str(token),
+                'user': UserProfileSerializer(user, context={'request': request}).data
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({'success': False,'log': error}, status=status.HTTP_400_BAD_REQUEST)
