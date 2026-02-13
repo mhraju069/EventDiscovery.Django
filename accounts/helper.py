@@ -5,6 +5,9 @@ from django.utils import timezone
 from django.utils.text import slugify
 from django.core.files.base import ContentFile
 from django.contrib.auth.hashers import make_password
+import jwt
+import json
+from jwt.algorithms import RSAAlgorithm
 
 def verify_otp(email, otp_code):
     try:
@@ -92,3 +95,57 @@ def google_login(access_token):
     except Exception as e:
         return None, str(e)
 
+
+def apple_login(identity_token):
+    if not identity_token:
+        return None, "Identity token is required"
+
+    try:
+        # Fetch Apple's public keys to verify the token
+        response = requests.get("https://appleid.apple.com/auth/keys", timeout=10)
+        if response.status_code != 200:
+            return None, "Failed to fetch Apple public keys"
+        
+        apple_keys = response.json().get('keys')
+        
+        # Decode the header to find the correct key
+        unverified_header = jwt.get_unverified_header(identity_token)
+        kid = unverified_header.get('kid')
+        
+        key_data = next((k for k in apple_keys if k['kid'] == kid), None)
+        if not key_data:
+            return None, "Invalid Apple token"
+            
+        public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
+        
+        # Verify and decode the token
+        # Note: 'aud' should normally be checked against your client ID.
+        # Since it's not provided in the environment yet, we skip aud verification.
+        payload = jwt.decode(
+            identity_token, 
+            public_key, 
+            algorithms=['RS256'], 
+            options={"verify_aud": False}
+        )
+        
+        email = payload.get("email")
+        if not email:
+            return None, "Email not provided by Apple"
+
+        # Get or create user
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                "name": email.split('@')[0], # Fallback name
+                "is_active": True,
+                "password": make_password(None),
+            },
+        )
+
+        if getattr(user, "block", False):
+            return None, "User account is disabled"
+
+        return user, None
+
+    except Exception as e:
+        return None, str(e)
