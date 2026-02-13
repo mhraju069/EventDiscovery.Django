@@ -17,7 +17,7 @@ class EventSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'title', 'description', 'time', 'admin', 
-            'location', 'latitude', 'longitude', 'age_group', 
+            'location', 'latitude', 'longitude', 'age_from', 'age_to',
             'price', 'members', 'member_count', 'images'
         ]
         read_only_fields = ['id', 'admin', 'location']

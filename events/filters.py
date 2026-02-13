@@ -10,13 +10,17 @@ class EventFilter(filters.FilterSet):
     distance = filters.NumberFilter(method='filter_distance')
     user_lat = filters.NumberFilter(method='noop')
     user_long = filters.NumberFilter(method='noop')
-    age_group = filters.ChoiceFilter(choices=[('3-5', '3-5 yrs'), ('6-8', '6-8 yrs'), ('9-12', '9-12 yrs')])
     price_type = filters.CharFilter(method='filter_price')
     status = filters.CharFilter(method='filter_status')
 
     class Meta:
         model = Event
-        fields = ['age_group', 'admin']
+        fields = {
+            'age_from': ['gte', 'lte', 'exact'],
+            'age_to': ['gte', 'lte', 'exact'],
+            'price': ['gte', 'lte', 'exact'],
+            'admin': ['exact'],
+        }
 
     def noop(self, queryset, name, value):
         return queryset
