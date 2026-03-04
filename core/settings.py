@@ -5,6 +5,8 @@ from datetime import timedelta
 from dotenv import load_dotenv
 load_dotenv()
 from corsheaders.defaults import default_headers
+import firebase_admin
+from firebase_admin import credentials
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -144,3 +146,6 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
 CONTACT_EMAIL = os.getenv("CONTACT_EMAIL")
 
 
+# Firebase Admin SDK
+cred = credentials.Certificate("firebase-key.json")
+firebase_admin.initialize_app(cred)

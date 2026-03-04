@@ -28,6 +28,7 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     ROLE = (('parent', 'Parent'),('child', 'Child'),('admin', 'Admin'),)
     email = models.EmailField(max_length=255,unique=True,verbose_name="User Email")
+    uid = models.CharField(max_length=255,unique=True,verbose_name="User UID",null=True,blank=True)
     name = models.CharField(max_length=200, blank=True, null=True,verbose_name="User Name")
     bio = models.TextField(blank=True, null=True,verbose_name="User Bio")
     cover = models.ImageField(upload_to='cover_images/', blank=True, null=True,)

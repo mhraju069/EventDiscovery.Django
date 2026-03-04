@@ -10,54 +10,79 @@ from .helper import *
 from rest_framework_simplejwt.tokens import RefreshToken
 
 # Create your views here.
+class FirebaseAuthenticationView(APIView):
 
-class SignUpView(APIView):
+    permission_classes = [permissions.AllowAny]
+
     def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
+        id_token = request.query_params.get('token')
+        oauth = request.query_params.get('oauth',True)
         name = request.data.get('name')
-        
-        if not email or not password or not name:
-            return Response({'success': False,'log': 'name, email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if User.objects.filter(email=email).exists():
-            return Response({'success': False,'log': 'User with this email already exists'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        user = User.objects.create_user(email=email, name=name)
-        user.set_password(password)
-        user.save()
-        
-        token = RefreshToken.for_user(user)
-        return Response({
-            'refresh': str(token),
-            'access': str(token.access_token),
-            'user': UserProfileSerializer(user).data
-        }, status=status.HTTP_201_CREATED)
-        return Response({'success': False,'log': 'User creation failed'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if not oauth and not name:
+            return Response({'status': False,'log': 'Name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-class SignInView(APIView):
-    def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
+        if not id_token:
+            return Response({'status': False,'log': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if email and password:
-            user = User.objects.filter(email=email).first()
-            if user and user.check_password(password):
-
-                if not user.is_active:
-                    return Response({'success': False,'log': 'User is not active'}, status=status.HTTP_400_BAD_REQUEST)
-                if user.block:
-                    return Response({'success': False,'log': 'User is blocked'}, status=status.HTTP_400_BAD_REQUEST)
-
-                token = RefreshToken.for_user(user)
-                return Response({
-                    'refresh': str(token),
-                    'access': str(token.access_token),
-                    'user': UserProfileSerializer(user).data
-                }, status=status.HTTP_201_CREATED)
+        try:
+            decoded_token = firebase_auth.verify_id_token(id_token)
+        except Exception as e:
+            return Response({'status': False,'log': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        uid = decoded_token.get('uid')
+        email = decoded_token.get('email')
+        
+        if not email:
+            return Response({'status': False,'log': 'Email not provided by Firebase'}, status=status.HTTP_400_BAD_REQUEST)
             
-        return Response({'success': False,'log': 'User authentication failed'}, status=status.HTTP_400_BAD_REQUEST)
+        name = decoded_token.get('name')
+        profile_image_url = decoded_token.get('picture')
+
+        if oauth:
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={
+                    "uid":uid,
+                    'name': name,
+                    'is_active': True,
+                    'password': make_password(None),
+                },
+            )
+            if created and profile_image_url:
+                img_response = requests.get(profile_image_url)
+                if img_response.status_code == 200:
+                    file_name = f"{slugify(name or email.split('@')[0])}-profile.jpg"
+                    user.image.save(
+                        file_name,
+                        ContentFile(img_response.content),
+                        save=True,
+                    )
+        else:
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={
+                    "uid":uid,
+                    'name': name,
+                    'is_active': False,
+                    'password': make_password(uid),
+                }
+            )
+            if not user.is_active:
+                send_otp(user.email)
+
+        if user:
+            token = RefreshToken.for_user(user)
+            return Response({
+                'access': str(token.access_token),
+                'refresh': str(token),
+                'user': UserProfileSerializer(user, context={'request': request}).data,
+                'status': True,
+                'active': user.is_active,
+                'log': 'Login successful'
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({'status': False,'log': 'Invalid or expired token'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
@@ -106,7 +131,6 @@ class OtpVerifyView(APIView):
             except User.DoesNotExist:
                 return Response({"status": False,"log": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
             return Response({
                 "user": UserSerializer(user).data,
@@ -118,67 +142,3 @@ class OtpVerifyView(APIView):
             status_code = status.HTTP_403_FORBIDDEN if "Too many attempts" in result['log'] else status.HTTP_400_BAD_REQUEST
             return Response({"status": False, "log": result['log']}, status=status_code)
 
-
-class ResetPassword(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request):
-        email = request.data.get('email')
-        new_password = request.data.get('new_password')
-
-        if not email or not new_password :
-            return Response(
-                {"error": "Email and new password are required."},
-                status=400
-            )
-        
-        elif request.user.email != email :
-            return Response(
-                {"error": "You can only reset your own password."},
-                status=403)
-        
-        try:
-            user = User.objects.get(email=email)
-            user.set_password(new_password)
-            user.save()
-            return Response({"status": True, "log": "Password reset successfully"}, status=200)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
-
-
-class GetProfileView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        user = User.objects.filter(email=request.user.email).first()
-        serializer = UserProfileSerializer(user)
-        return Response(serializer.data)
-
-
-class OAuthLoginView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request, provider):
-
-        token = request.query_params.get('token')
-
-        if not token:
-            return Response({'success': False,'log': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if provider == 'google':
-            user, error = google_login(token)
-
-        elif provider == 'apple':
-            user, error = apple_login(token)
-        else:
-            return Response({'success': False,'log': 'Invalid provider, use google or apple'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if user:
-            token = RefreshToken.for_user(user)
-            return Response({
-                'access': str(token.access_token),
-                'refresh': str(token),
-                'user': UserProfileSerializer(user, context={'request': request}).data
-            }, status=status.HTTP_200_OK)
-        else:
-            return Response({'success': False,'log': error}, status=status.HTTP_400_BAD_REQUEST)
